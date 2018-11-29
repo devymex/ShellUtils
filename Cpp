@@ -1,0 +1,70 @@
+#!/bin/bash
+
+HELPSTR=$HELPSTR"To Install Cpp to system:\n\t[sudo] $0 --install\n\n"
+HELPSTR=$HELPSTR"To remove Cpp from system:\n\t[sudo] Cpp --uninstall\n\n"
+HELPSTR=$HELPSTR"To Make & Run a *.cpp:\n\tCpp <CPP_FILE> [RUN_ARGS]\n\n"
+HELPSTR=$HELPSTR"Tips: You can set g++ options in your CPP_FILE with prefix \"//GPPOPT:\":\n"
+HELPSTR=$HELPSTR"\t//GPPOPT: -std=c++11 -O3 -fopenmp -pthread"
+
+if [[ $# -lt 1 ]] || [[ $1 == --* ]]; then
+	if [[ $1 == "--install" ]]; then
+		if cp $0 /bin/Cpp; then
+			chmod +x /bin/Cpp
+			echo "Install successful!"
+			echo -e "\tType \`Cpp\` to see help."
+		else
+			echo "Install failed!"
+		fi
+	elif [[ $1 == "--uninstall" ]]; then
+		if cp $0 /bin/Cpp; then
+			echo "Bye bye!"
+		else
+			echo "Uninstall failed!"
+		fi
+	else
+		echo -e $HELPSTR
+	fi
+	exit 0
+fi
+
+INFILE=$1
+OUTFILE=$(dirname INFILE)/$(basename ${1%.*})
+if [ -f "$OUTFILE" ] && [ "$OUTFILE" -ot "$INFILE" ]; then
+	echo $OUTFILE " is older than " $INFILE", re-building..."
+	rm $OUTFILE
+fi
+
+if ! [ -f "$OUTFILE" ]; then
+	while read LINE; do
+		if [[ $LINE == //GPPOPT:* ]]; then
+			GPPOPT+=${LINE#$"//GPPOPT:"}
+		else
+			HDR="$(echo $LINE | tr -d '[:space:]')"
+			if [[ $HDR == "#include<"* ]] || [[ $HDR == "#include\""* ]]; then
+				HDR=${HDR#"#include<"}
+				HDR=${HDR%%>*}
+				if [[ $HDR == "opencv2/opencv.hpp" ]]; then
+					GPPOPT+=" `pkg-config --libs opencv`"
+				elif [[ $HDR == "glog/logging.h" ]]; then
+					GPPOPT+=" -lglog"
+				fi
+			fi
+		fi
+	done < $INFILE
+	BUILDCMD="g++ $INFILE -o $OUTFILE $GPPOPT"
+	echo "Building: $BUILDCMD"
+	if ! eval $BUILDCMD; then
+		echo "Building failed!"
+		exit 1
+	fi
+fi
+
+RUNARGS=""
+if [[ $# -gt 1 ]]; then
+	for ((i = 2; i <= $#; i++ )); do
+		RUNARGS+=\"${!i}\"\ 
+	done
+fi
+RUNCMD="$OUTFILE $RUNARGS"
+echo "Running: $RUNCMD" && eval $RUNCMD
+

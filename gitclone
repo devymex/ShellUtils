@@ -1,0 +1,95 @@
+#!/bin/bash
+
+### PROXY SERVER CONFIGURATION ###
+HOST_IP=
+SSH_USER=	# user must have root privilege
+SSH_PSWD=	# must with quota
+SSH_PORT=	# leave it blank to use default port 22
+
+
+## DANGEROUS! DO NOT TOUCH FOLLOWING SCRIPTS ###
+printf "Cloning Repository from GitHub via proxy\n"
+printf "\t--Powered by Devymex (devymex@gmail.com)\n\n"
+
+MSG="Please edit $0 to configure proxy server."
+if [[ -z $HOST_IP ]]; then echo $MSG; exit -1; fi
+if [[ -z $SSH_USER ]]; then echo $MSG; exit -1; fi
+if [[ -z $SSH_PSWD ]]; then echo $MSG; exit -1; fi
+if [[ -z $SSH_PORT ]]; then SSH_PORT=22; fi
+
+if [[ $# -ne 1 ]]; then
+	echo -e "Usage: \n\t $0 https://github.com/example/example.git"
+	exit -1
+fi
+
+URL=$1
+REPO=$(basename -- "$URL")
+EXT="${REPO##*.}"
+REPO="${REPO%.*}"
+
+if [[ "$EXT" != "git" ]] || [[ -z $REPO ]]; then
+	echo "Bad URL: " $URL && exit -1;
+fi
+if [[ -d "$REPO.zip" ]] || [[ -d "$REPO" ]]; then
+	printf "WARNING: Local path \"$REPO\" or "
+	printf "file \"$REPO.zip\" already exists.\n"
+	echo "Choose yes(1) to DELETE and continue..."
+	select yn in "yes" "no"; do
+		case $yn in
+			yes ) break;;
+			no ) exit 1;;
+		esac
+	done
+fi
+
+dpkg -s sshpass rsync zip
+if [[ $? -ne 0 ]]; then
+	echo "Packages sshpass, rsync and zip must exists, continue to install..."
+	CMD="sudo apt-get install sshpass rsync zip"
+	echo $CMD && eval $CMD
+	if [[ $? -ne 0 ]]; then echo "Installation failed!" && exit -1; fi
+fi
+
+printf "sudo -n true\n" > .clone.sh
+printf "if [[ \$? -ne 0 ]]; then exit -1; fi\n" >> .clone.sh
+printf "if [[ -d "$REPO" ]]; then rm -rf $REPO; fi\n" >> .clone.sh
+printf "pkill zip && pkill git && pkill rsync\n" >> .clone.sh
+printf "apt-get -y install git zip rsync\n" >> .clone.sh
+printf "if [[ \$? -ne 0 ]]; then exit -2; fi\n" >> .clone.sh
+printf "git clone --recurse-submodules $URL\n" >> .clone.sh
+printf "if [[ \$? -ne 0 ]]; then exit -3; fi\n" >> .clone.sh
+printf "if [[ -d "$REPO.zip" ]]; then rm $REPO.zip; fi\n" >> .clone.sh
+printf "zip -r9 $REPO.zip $REPO\n" >> .clone.sh
+printf "if [[ \$? -ne 0 ]]; then exit -4; fi\n" >> .clone.sh
+printf "rm -rf $REPO && exit 0" >> .clone.sh
+chmod +x .clone.sh
+sshpass -p $SSH_PSWD scp -P $SSH_PORT .clone.sh $SSH_USER@$HOST_IP:~/
+if [[ $? -ne 0 ]]; then
+	echo "SSH failed: ssh -p $SSH_PORT $SSH_USER@$HOST_IP";
+	rm -f .clone.sh && exit -1
+fi
+rm -f .clone.sh
+
+sshpass -p $SSH_PSWD ssh -p $SSH_PORT $SSH_USER@$HOST_IP './.clone.sh'
+if [[ $? -eq -1 ]]; then echo "Server failed: sudo privilege"; exit -1
+elif [[ $? -eq -2 ]]; then echo "Server failed: apt-get install"; exit -1
+elif [[ $? -eq -3 ]]; then echo "Server failed: git clone"; exit -1
+elif [[ $? -eq -4 ]]; then echo "Server failed: zip"; exit -1
+fi
+
+SSH_CMD="sshpass -p $SSH_PSWD ssh -p $SSH_PORT"
+printf "Begin download: "
+CMD="rsync --info=progress2 -e \"$SSH_CMD\" $SSH_USER@$HOST_IP:~/$REPO.zip ./"
+echo $CMD && rm -f $REPO.zip
+eval $CMD
+if [[ $? -ne 0 ]]; then echo "Download failed!"; exit -1; fi
+
+rm -rf $REPO
+unzip $REPO.zip
+if [[ $? -ne 0 ]]; then echo "Unzip failed!"; exit -1; fi
+
+rm $REPO.zip
+sshpass -p $SSH_PSWD ssh -p $SSH_PORT $SSH_USER@$HOST_IP \
+	"rm .clone.sh $REPO.zip"
+echo "Mission Completed!"
+
