@@ -1,0 +1,7 @@
+#!/bin/bash
+
+for i in {1..3}; do
+	sync
+	sudo sh -c "echo $i > /proc/sys/vm/drop_caches"
+done
+
