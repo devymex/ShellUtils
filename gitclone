@@ -12,9 +12,9 @@ printf "Cloning Repository from GitHub via proxy\n"
 printf "\t--Powered by Devymex (devymex@gmail.com)\n\n"
 
 MSG="Please edit $0 to configure proxy server."
-if [[ -z $HOST_IP ]]; then echo $MSG; exit -1; fi
-if [[ -z $SSH_USER ]]; then echo $MSG; exit -1; fi
-if [[ -z $SSH_PSWD ]]; then echo $MSG; exit -1; fi
+if [[ -z $HOST_IP ]] || [[ -z $SSH_USER ]] || [[ -z $SSH_PSWD ]]; then
+	echo $MSG && exit -1
+fi
 if [[ -z $SSH_PORT ]]; then SSH_PORT=22; fi
 
 if [[ $# -ne 1 ]]; then
